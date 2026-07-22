@@ -1,0 +1,24 @@
+@font-face {
+    font-family: 'Doggybag Round';
+    src: url('Doggybag-Round.eot');
+    src: local('Doggybag Round'), local('Doggybag-Round'),
+        url('Doggybag-Round.eot?#iefix') format('embedded-opentype'),
+        url('Doggybag-Round.woff2') format('woff2'),
+        url('Doggybag-Round.woff') format('woff'),
+        url('Doggybag-Round.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Doggybag';
+    src: url('Doggybag-Regular.eot');
+    src: local('Doggybag'), local('Doggybag-Regular'),
+        url('Doggybag-Regular.eot?#iefix') format('embedded-opentype'),
+        url('Doggybag-Regular.woff2') format('woff2'),
+        url('Doggybag-Regular.woff') format('woff'),
+        url('Doggybag-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+

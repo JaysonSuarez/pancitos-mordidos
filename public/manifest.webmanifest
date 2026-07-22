@@ -1,0 +1,9 @@
+{
+  "name": "Pancitos Mordi2",
+  "short_name": "Pancitos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff9ed",
+  "theme_color": "#18258d",
+  "description": "Gestión rápida de ventas para Pancitos Mordi2"
+}
