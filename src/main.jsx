@@ -4,7 +4,7 @@ import './styles.css'
 import './empty.css'
 import './components.css'
 import {
-  supabase, fetchProducts, fetchSettings, saveDeliveryFee,
+  supabase, fetchProducts, fetchSettings, saveDeliveryFee, saveAdminName,
   saveProduct, deleteProduct, fetchSupplies, saveSupply, deleteSupply,
   fetchOrders, createOrder, updateOrderStatus, deleteOrder,
   pushSupported, isSubscribed, subscribeAdmin, notifyAdmins,
@@ -68,27 +68,51 @@ function playDing() {
 }
 
 /* ---------------- Navegación ---------------- */
-function Sidebar({ page, setPage }) {
+function initials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return 'AD'
+  return (parts.slice(0, 2).map((p) => p[0].toUpperCase()).join('')) || 'AD'
+}
+
+function Sidebar({ page, setPage, adminName, onEditAdmin }) {
   const items = [['dashboard', 'grid', 'Resumen'], ['pos', 'cart', 'Nueva venta'], ['orders', 'receipt', 'Pedidos'], ['cash', 'wallet', 'Caja'], ['reports', 'chart', 'Reportes'], ['products', 'box', 'Productos']]
   return (
     <aside className="sidebar">
       <Brand/>
       <nav>{items.map(([id, icon, label]) => <button key={id} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon name={icon}/><span>{label}</span></button>)}</nav>
       <div className="side-bottom">
-        <div className="profile"><span>AM</span><div><strong>Ana María</strong><small>Administradora</small></div></div>
+        <button className="profile" onClick={onEditAdmin} title="Cambiar nombre del administrador">
+          <span className="avatar">{initials(adminName)}</span>
+          <div><strong>{adminName || 'Administrador'}</strong><small>Administradora · editar ✎</small></div>
+        </button>
       </div>
     </aside>
   )
 }
 
-function Topbar({ title, onOpenMenu, pending, onBell }) {
+/* ---------------- Modal editar admin ---------------- */
+function AdminNameForm({ initial, onSave, onClose }) {
+  const [name, setName] = useState(initial || '')
+  const submit = () => { const v = name.trim(); if (!v) return; onSave(v) }
+  return (
+    <Modal onClose={onClose}>
+      <div className="modal-head"><span className="ring"><Icon name="user" size={22}/></span><div><h3>Tu nombre</h3><small>Aparece en el menú y los reportes</small></div></div>
+      <div className="modal-body">
+        <div className="field"><label>Nombre del administrador</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="¿Cómo te llamas?" autoFocus onKeyDown={(e) => e.key === 'Enter' && submit()}/></div>
+        <div className="modal-actions"><button className="btn-reject" onClick={onClose}>Cancelar</button><button className="btn-accept" onClick={submit}><Icon name="check" size={17}/> Guardar</button></div>
+      </div>
+    </Modal>
+  )
+}
+
+function Topbar({ title, onOpenMenu, pending, onBell, adminName, onEditAdmin }) {
   return (
     <header className="topbar">
       <button className="mobile-menu" onClick={onOpenMenu}><Icon name="menu"/></button>
       <div><p>Hoy · operación en vivo</p><h1>{title}</h1></div>
       <div className="top-actions">
         <button className="bell" onClick={onBell}><Icon name="bell"/>{pending > 0 && <em/>}</button>
-        <div className="avatar">AM</div>
+        <button className="avatar" onClick={onEditAdmin} title="Cambiar nombre del administrador">{initials(adminName)}</button>
       </div>
     </header>
   )
@@ -176,16 +200,17 @@ function Metric({ label, value, note, color }) {
   return <article className={`metric ${color}`}><div><small>{label}</small><h2>{value}</h2><p>{note}</p></div><span className="metric-mark">{color === 'blue' ? '↗' : color === 'orange' ? '↓' : color === 'pink' ? '✦' : '◷'}</span></article>
 }
 
-function Dashboard({ setPage, orders }) {
+function Dashboard({ setPage, orders, adminName, onEditAdmin }) {
   const today = new Date().toDateString()
   const todays = orders.filter((o) => new Date(o.created_at).toDateString() === today && o.status !== 'Rechazado' && o.status !== 'Solicitado')
   const salesToday = todays.reduce((s, o) => s + o.total, 0)
   const pending = orders.filter((o) => ['Pendiente', 'Preparando', 'Listo'].includes(o.status)).length
   const requests = orders.filter((o) => o.status === 'Solicitado').length
+  const firstName = (adminName || 'administrador').trim().split(/\s+/)[0]
   return (
     <>
       <div className="dashboard-head">
-        <div><span className="eyebrow">Así va tu día</span><h2>¡Buen día, Ana! <span>✦</span></h2><p>Tu operación está lista para comenzar.</p></div>
+        <div><span className="eyebrow">Así va tu día</span><h2 title="Clic para editar tu nombre" style={{ cursor: 'pointer' }} onClick={onEditAdmin}>¡Buen día, {firstName}! <span>✎</span></h2><p>Tu operación está lista para comenzar.</p></div>
         <button className="primary" onClick={() => setPage('pos')}><Icon name="plus"/> Nueva venta</button>
       </div>
       <section className="metric-grid">
@@ -586,6 +611,7 @@ function App() {
   const [pushOn, setPushOn] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [dismissedBanner, setDismissedBanner] = useState(false)
+  const [editingName, setEditingName] = useState(false)
   const [toasts, setToasts] = useState([])
   const knownIds = useRef(new Set())
 
@@ -661,23 +687,34 @@ function App() {
     try { await subscribeAdmin(); setPushOn(true); pushToast('¡Notificaciones activadas!', 'ok', '🔔') }
     catch (e) { pushToast(e.message || 'No se pudieron activar.', 'err', '⚠️') }
   }
+  const saveAdmin = async (name) => {
+    try {
+      await saveAdminName(name)
+      setSettings((s) => ({ ...s, admin_name: name }))
+      setEditingName(false)
+      pushToast('Nombre guardado.', 'ok', '✅')
+    } catch (e) {
+      pushToast('No se pudo guardar el nombre.', 'err', '⚠️')
+    }
+  }
 
   if (isPublic) return <ToastCtx.Provider value={pushToast}><PublicMenu/><Toasts list={toasts}/></ToastCtx.Provider>
 
   const titles = { dashboard: 'Resumen', pos: 'Nueva venta', orders: 'Pedidos', cash: 'Caja', reports: 'Reportes', products: 'Productos' }
   const showBanner = pushSupported() && !pushOn && !dismissedBanner
+  const adminName = settings.admin_name || 'Ana María'
 
   return (
     <ToastCtx.Provider value={pushToast}>
       <div className="app-shell">
-        <Sidebar page={page} setPage={setPage}/>
+        <Sidebar page={page} setPage={setPage} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>
         <main className="main">
-          <Topbar title={titles[page]} onOpenMenu={() => setMobile(!mobile)} pending={pendingCount} onBell={() => setNotifOpen((v) => !v)}/>
+          <Topbar title={titles[page]} onOpenMenu={() => setMobile(!mobile)} pending={pendingCount} onBell={() => setNotifOpen((v) => !v)} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>
           {mobile && <div className="mobile-nav"><button onClick={() => setMobile(false)}><Icon name="close"/></button>{[['dashboard', 'Resumen'], ['pos', 'Nueva venta'], ['orders', 'Pedidos'], ['cash', 'Caja'], ['reports', 'Reportes'], ['products', 'Productos']].map(([id, label]) => <a key={id} onClick={() => { setPage(id); setMobile(false) }}>{label}</a>)}</div>}
           {notifOpen && <NotifPanel orders={orders} pushOn={pushOn} onEnable={enablePush} onClose={() => setNotifOpen(false)}/>}
           <div className="page-content">
             {showBanner && <NotifBanner onEnable={enablePush}/>}
-            {page === 'dashboard' && <Dashboard setPage={setPage} orders={orders}/>}
+            {page === 'dashboard' && <Dashboard setPage={setPage} orders={orders} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>}
             {page === 'pos' && <POS products={products} addOrder={addOrder}/>}
             {page === 'orders' && <Orders orders={orders} onAdvance={advance} onDelete={removeOrder}/>}
             {page === 'cash' && <Cash orders={orders}/>}
@@ -686,6 +723,7 @@ function App() {
           </div>
         </main>
       </div>
+      {editingName && <AdminNameForm initial={adminName} onSave={saveAdmin} onClose={() => setEditingName(false)}/>}
       {incoming && <IncomingOrderModal order={incoming} onAccept={acceptIncoming} onReject={rejectIncoming}/>}
       <Toasts list={toasts}/>
     </ToastCtx.Provider>

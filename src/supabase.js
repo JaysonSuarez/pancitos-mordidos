@@ -14,10 +14,13 @@ export async function fetchProducts() {
 }
 export async function fetchSettings() {
   const { data } = await supabase.from('pm_settings').select('*').eq('id', 1).single()
-  return data || { delivery_fee: 2000, business_name: 'Pancitos Mordi2', phone: '3103922891' }
+  return data || { delivery_fee: 2000, business_name: 'Pancitos Mordi2', phone: '3103922891', admin_name: 'Ana María' }
 }
 export async function saveDeliveryFee(fee) {
   return supabase.from('pm_settings').update({ delivery_fee: fee }).eq('id', 1)
+}
+export async function saveAdminName(name) {
+  return supabase.from('pm_settings').update({ admin_name: name }).eq('id', 1)
 }
 export async function saveProduct(product) {
   const row = { name: product.name, price: product.price, category: product.category, tag: product.tag }

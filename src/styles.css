@@ -161,7 +161,13 @@ button { font-family: inherit; text-transform: inherit; }
 .side-bottom { margin-top: auto; border-top: 3px solid rgba(255, 255, 255, 0.18); padding-top: 16px; }
 .side-bottom button { color: var(--cream); }
 
-.profile { display: flex; align-items: center; gap: 11px; padding: 16px 8px 4px; }
+.profile {
+  display: flex; align-items: center; gap: 11px; padding: 16px 8px 4px;
+  width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left;
+  color: inherit; font: inherit; border-radius: var(--r-md);
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.profile:hover { background: rgba(255, 255, 255, 0.12); transform: translateX(3px); }
 .profile > span, .avatar {
   display: grid;
   place-items: center;
@@ -175,6 +181,8 @@ button { font-family: inherit; text-transform: inherit; }
 }
 .profile strong { display: block; font-size: 13px; }
 .profile small { display: block; font-size: 10px; color: #bcc3ff; margin-top: 2px; }
+.topbar .avatar { width: 44px; height: 44px; cursor: pointer; transition: transform 0.12s ease; }
+.topbar .avatar:hover { transform: translateY(-2px); }
 
 /* ============================================================
    MAIN + TOPBAR
