@@ -48,7 +48,11 @@ function Toasts({ list }) {
 
 /* ---------------- Marca ---------------- */
 function Brand({ small = false }) {
-  return <div className={`brand ${small ? 'brand-small' : ''}`}><span>PANCITOS</span><strong>mordi</strong><i>2</i></div>
+  return (
+    <div className={`brand ${small ? 'brand-small' : ''}`}>
+      <img src="/logo.png" alt="Pancitos Mordi2" className={`brand-logo ${small ? 'brand-logo-small' : ''}`} />
+    </div>
+  )
 }
 
 /* ---------------- Sonido ---------------- */

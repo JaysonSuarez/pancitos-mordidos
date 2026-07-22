@@ -5,5 +5,9 @@
   "display": "standalone",
   "background_color": "#fff9ed",
   "theme_color": "#18258d",
-  "description": "Gestión rápida de ventas para Pancitos Mordi2"
+  "description": "Gestión rápida de ventas para Pancitos Mordi2",
+  "icons": [
+    { "src": "/logo.png", "sizes": "any", "type": "image/png", "purpose": "any" },
+    { "src": "/logo.png", "sizes": "any", "type": "image/png", "purpose": "maskable" }
+  ]
 }

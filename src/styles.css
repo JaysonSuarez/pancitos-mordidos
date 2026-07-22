@@ -78,40 +78,22 @@ button { font-family: inherit; text-transform: inherit; }
    ============================================================ */
 .brand {
   position: relative;
-  padding: 6px 6px 26px;
-  line-height: 0.82;
+  display: flex;
+  align-items: center;
   user-select: none;
 }
-.brand span {
+.brand-logo {
+  width: auto;
+  height: 52px;
+  object-fit: contain;
   display: block;
-  font-family: var(--logo);
-  font-size: 40px;
-  color: var(--cream);
-  letter-spacing: 1px;
-  -webkit-text-stroke: 3px var(--ink);
-  paint-order: stroke fill;
-  text-shadow: 4px 5px 0 var(--ink);
-  transform: rotate(-2deg);
+  filter: drop-shadow(3px 4px 0 var(--ink));
 }
-.sidebar .brand span { color: var(--cream); text-shadow: 3px 4px 0 #0b0f66; }
-.brand strong {
-  display: inline-block;
-  font-family: var(--legible);
-  font-size: 30px;
-  color: var(--pink);
-  -webkit-text-stroke: 2.5px var(--ink);
-  paint-order: stroke fill;
-  margin: 4px 0 0 26px;
-  transform: rotate(-3deg);
+.brand-logo-small {
+  height: 40px;
+  filter: drop-shadow(2px 3px 0 var(--ink));
 }
-.brand i {
-  font-family: var(--legible);
-  font-style: normal;
-  font-size: 30px;
-  color: var(--pink);
-  -webkit-text-stroke: 2.5px var(--ink);
-  paint-order: stroke fill;
-}
+.sidebar .brand { padding: 2px 0; }
 
 /* ============================================================
    SHELL + SIDEBAR
@@ -726,10 +708,8 @@ textarea::placeholder { color: var(--blue); opacity: 0.5; }
   gap: 28px;
   border-bottom: 4px solid var(--ink);
 }
-.brand-small { padding: 4px 4px 6px; line-height: 0.95; }
-.brand-small span { font-family: var(--logo); font-size: 26px; text-shadow: 3px 3px 0 var(--ink); }
-.brand-small strong { font-size: 17px; margin: 2px 0 0 12px; }
-.brand-small i { font-size: 17px; }
+.brand-small { padding: 0; }
+.brand-small .brand-logo { height: 40px; }
 .public-menu header a {
   font-size: 13px; font-weight: 800; text-decoration: none; color: var(--ink);
 }
