@@ -130,6 +130,29 @@ p, small, li, input, textarea, select,
 .order-line { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
 .order-line b { color: var(--pink); }
 
+/* Edición breve de pedidos guardados */
+.edit-order-body { display: grid; gap: 14px; }
+.edit-order-current { background: var(--cream); border: 2.5px solid var(--ink); border-radius: 14px; padding: 12px 14px; }
+.edit-order-current > b, .edit-order-add-head b { display: block; font-family: var(--display); font-size: 15px; }
+.edit-order-line { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; font-family: var(--legible); font-size: 12px; }
+.edit-order-line strong { white-space: nowrap; }
+.edit-order-add-head small { font-family: var(--legible); font-size: 11px; opacity: .7; }
+.search.edit-order-search { width: 100%; box-shadow: none; }
+.edit-order-categories { margin: 0; }
+.edit-order-categories button { padding: 7px 12px; font-size: 11px; }
+.edit-order-products { max-height: 28vh; overflow: auto; border-top: 2px dashed rgba(26,31,156,.18); }
+.edit-order-product { min-height: 54px; padding: 8px 2px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 2px dashed rgba(26,31,156,.15); }
+.edit-order-product > div:first-child { display: grid; gap: 3px; }
+.edit-order-product > div:first-child b { font-family: var(--legible); font-size: 12px; }
+.edit-order-product small { font-family: var(--legible); font-size: 11px; opacity: .7; }
+.edit-order-add, .edit-order-stepper button { border: 2px solid var(--ink); border-radius: 9px; padding: 7px 10px; background: var(--sun); color: var(--ink); font-weight: 800; cursor: pointer; white-space: nowrap; }
+.edit-order-stepper { display: flex; align-items: center; gap: 9px; }
+.edit-order-stepper button { width: 30px; height: 30px; padding: 0; background: var(--ink); color: var(--cream); font-size: 18px; }
+.edit-order-empty { margin: 12px 0; opacity: .7; }
+.edit-order-total { display: flex; justify-content: space-between; align-items: center; border-top: 3px solid var(--ink); padding-top: 12px; font-weight: 800; }
+.edit-order-total strong { font-family: var(--display); font-size: 22px; }
+.edit-order-body .modal-actions button:disabled { opacity: .55; cursor: not-allowed; }
+
 .totals { display: grid; gap: 6px; margin: 4px 0 18px; }
 .totals .row { display: flex; justify-content: space-between; font-family: var(--legible); font-size: 14px; }
 .totals .row.grand { border-top: 3px solid var(--ink); padding-top: 10px; margin-top: 4px; }

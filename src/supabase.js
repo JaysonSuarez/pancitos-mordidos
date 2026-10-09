@@ -54,6 +54,21 @@ export async function createOrder(order) {
 export async function updateOrderStatus(id, status) {
   return supabase.from('pm_orders').update({ status }).eq('id', id)
 }
+export async function updateOrderItems(order, items, totals) {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  const { data, error } = await supabase
+    .from('pm_orders')
+    .update({ items, subtotal: totals.subtotal, total: totals.total })
+    .eq('id', order.id)
+    .gte('created_at', cutoff)
+    .lte('created_at', new Date().toISOString())
+    .neq('status', 'Rechazado')
+    .select()
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('El pedido ya no se puede editar. El límite es de 30 minutos desde que se guardó.')
+  return data
+}
 export async function deleteOrder(id) {
   return supabase.from('pm_orders').delete().eq('id', id)
 }

@@ -6,9 +6,10 @@ import './components.css'
 import {
   supabase, fetchProducts, fetchSettings, saveDeliveryFee, saveAdminName,
   saveProduct, deleteProduct, fetchSupplies, saveSupply, deleteSupply,
-  fetchOrders, createOrder, updateOrderStatus, deleteOrder,
+  fetchOrders, createOrder, updateOrderStatus, updateOrderItems, deleteOrder,
   pushSupported, isSubscribed, subscribeAdmin, notifyAdmins,
 } from './supabase.js'
+import { calculateOrderTotals, canEditOrder, mergeOrderItems } from './orderUtils.js'
 
 const money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const fmt = (value) => money.format(Number(value) || 0)
@@ -301,10 +302,78 @@ function Confirm({ title, message, confirmLabel = 'Borrar', onConfirm, onClose }
   )
 }
 
-function Orders({ orders, onAdvance, onDelete }) {
+function EditOrderModal({ order, products, onSave, onClose }) {
+  const [category, setCategory] = useState('Todos')
+  const [search, setSearch] = useState('')
+  const [added, setAdded] = useState([])
+  const [saving, setSaving] = useState(false)
+  const toast = useToast()
+  const available = products.filter((product) => product.active !== false &&
+    (category === 'Todos' || product.category === category) &&
+    product.name.toLowerCase().includes(search.toLowerCase()))
+  const quantity = (id) => added.find((item) => item.id === id)?.qty || 0
+  const change = (product, qty) => setAdded((current) => {
+    const existing = current.find((item) => item.id === product.id)
+    if (qty <= 0) return current.filter((item) => item.id !== product.id)
+    const nextItem = { id: product.id, name: product.name, price: product.price, qty }
+    return existing
+      ? current.map((item) => item.id === product.id ? nextItem : item)
+      : [...current, nextItem]
+  })
+  const combinedItems = mergeOrderItems(order.items || [], added)
+  const totals = calculateOrderTotals(combinedItems, order.delivery_fee)
+  const save = async () => {
+    if (!added.length || saving) return
+    setSaving(true)
+    try {
+      await onSave(order, combinedItems, totals)
+      onClose()
+    } catch (error) {
+      toast(error.message || 'No se pudieron guardar los cambios.', 'err', '⚠️')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="modal-head"><span className="ring"><Icon name="edit" size={22}/></span><div><h3>Editar pedido #{String(order.id).slice(-4)}</h3><small>Disponible durante los primeros 30 minutos</small></div></div>
+      <div className="modal-body edit-order-body">
+        <div className="edit-order-current">
+          <b>Pedido guardado</b>
+          {(order.items || []).map((item, index) => <div className="edit-order-line" key={`${item.id ?? item.name}-${index}`}><span>{item.qty}× {item.name}</span><strong>{fmt(item.price * item.qty)}</strong></div>)}
+        </div>
+        <div className="edit-order-add-head"><b>Agregar productos</b><small>Lo que agregues se suma al pedido original.</small></div>
+        <label className="search edit-order-search"><Icon name="search"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar producto"/></label>
+        <div className="categories edit-order-categories">{['Todos', 'Pancitos', 'Bebidas'].map((item) => <button key={item} className={item === category ? 'selected' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>
+        <div className="edit-order-products">
+          {available.map((product) => (
+            <div className="edit-order-product" key={product.id}>
+              <div><b>{product.name}</b><small>{fmt(product.price)}</small></div>
+              {quantity(product.id)
+                ? <div className="edit-order-stepper"><button aria-label={`Quitar uno de ${product.name}`} onClick={() => change(product, quantity(product.id) - 1)}>−</button><b>{quantity(product.id)}</b><button aria-label={`Agregar uno de ${product.name}`} onClick={() => change(product, quantity(product.id) + 1)}>+</button></div>
+                : <button className="edit-order-add" onClick={() => change(product, 1)}>＋ Agregar</button>}
+            </div>
+          ))}
+          {!available.length && <p className="edit-order-empty">No hay productos que coincidan con la búsqueda.</p>}
+        </div>
+        <div className="edit-order-total"><span>Nuevo total</span><strong>{fmt(totals.total)}</strong></div>
+        <div className="modal-actions"><button className="btn-reject" onClick={onClose} disabled={saving}>Cancelar</button><button className="btn-accept" onClick={save} disabled={!added.length || saving}><Icon name="check" size={17}/>{saving ? ' Guardando…' : ' Guardar cambios'}</button></div>
+      </div>
+    </Modal>
+  )
+}
+
+function Orders({ orders, products, onAdvance, onDelete, onEdit }) {
   const statuses = ['Pendiente', 'Preparando', 'Listo', 'Entregado']
   const board = orders.filter((o) => statuses.includes(o.status))
   const [toDelete, setToDelete] = useState(null)
+  const [toEdit, setToEdit] = useState(null)
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 10000)
+    return () => clearInterval(timer)
+  }, [])
   const confirm = async () => {
     if (!toDelete) return
     await onDelete(toDelete)
@@ -327,6 +396,7 @@ function Orders({ orders, onAdvance, onDelete }) {
               <strong>{fmt(order.total)}</strong>
               <div className="ticket-actions">
                 {status !== 'Entregado' && <button onClick={() => onAdvance(order)}>{status === 'Listo' ? 'Marcar entregado' : `Pasar a ${statuses[statuses.indexOf(status) + 1]}`} <Icon name="arrow" size={15}/></button>}
+                {canEditOrder(order, now) && <button className="edit-order-ticket" onClick={() => setToEdit(order)} title="Editar durante los primeros 30 minutos"><Icon name="edit" size={14}/> Editar</button>}
                 <button className="del-btn" onClick={() => setToDelete(order)} title="Borrar pedido"><Icon name="trash" size={15}/></button>
               </div>
             </article>
@@ -334,6 +404,7 @@ function Orders({ orders, onAdvance, onDelete }) {
         </div>
       ))}</div>
       {toDelete && <Confirm title="¿Borrar pedido?" message={`Se eliminará el pedido #${String(toDelete.id).slice(-4)} de ${toDelete.customer_name || 'mostrador'} ($${fmt(toDelete.total)}).`} onConfirm={confirm} onClose={() => setToDelete(null)}/>}
+      {toEdit && <EditOrderModal order={toEdit} products={products} onSave={onEdit} onClose={() => setToEdit(null)}/>}
     </>
   )
 }
@@ -656,7 +727,11 @@ function App() {
   const incoming = orders.find((o) => o.status === 'Solicitado')
   const pendingCount = orders.filter((o) => o.status === 'Solicitado').length
 
-  const addOrder = async (order) => { await createOrder(order) }
+  const addOrder = async (order) => {
+    const saved = await createOrder(order)
+    knownIds.current.add(saved.id)
+    setOrders((prev) => prev.some((item) => item.id === saved.id) ? prev : [saved, ...prev])
+  }
   const removeOrder = async (order) => {
     try {
       await deleteOrder(order.id)
@@ -674,6 +749,15 @@ function App() {
     const next = flow[Math.min(flow.indexOf(order.status) + 1, 3)]
     setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: next } : o))
     await updateOrderStatus(order.id, next)
+  }
+  const editOrder = async (order, items, totals) => {
+    try {
+      const updated = await updateOrderItems(order, items, totals)
+      setOrders((prev) => prev.map((item) => item.id === updated.id ? updated : item))
+      pushToast('Pedido actualizado.', 'ok', '✅')
+    } catch (error) {
+      throw error
+    }
   }
   const acceptIncoming = async () => {
     if (!incoming) return
@@ -720,7 +804,7 @@ function App() {
             {showBanner && <NotifBanner onEnable={enablePush}/>}
             {page === 'dashboard' && <Dashboard setPage={setPage} orders={orders} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>}
             {page === 'pos' && <POS products={products} addOrder={addOrder}/>}
-            {page === 'orders' && <Orders orders={orders} onAdvance={advance} onDelete={removeOrder}/>}
+            {page === 'orders' && <Orders orders={orders} products={products} onAdvance={advance} onDelete={removeOrder} onEdit={editOrder}/>}
             {page === 'cash' && <Cash orders={orders}/>}
             {page === 'reports' && <Reports orders={orders}/>}
             {page === 'products' && <Products products={products} reloadProducts={reloadProducts} settings={settings} reloadSettings={reloadSettings}/>}
