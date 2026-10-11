@@ -224,14 +224,15 @@ p, small, li, input, textarea, select,
 .notif-panel header { background: var(--ink); color: var(--cream); padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; }
 .notif-panel header h3 { font-family: var(--display); font-size: 18px; margin: 0; }
 .notif-panel header button { background: var(--pink); border: 0; color: #fff; border-radius: 99px; padding: 6px 12px; font-weight: 800; font-size: 10px; cursor: pointer; }
-.notif-list { max-height: 380px; overflow: auto; }
-.notif-item { display: flex; gap: 12px; align-items: center; padding: 14px 18px; border-bottom: 2.5px dashed rgba(26, 31, 156, 0.15); cursor: pointer; }
+.notif-list { max-height: min(65vh, 600px); overflow: auto; }
+.notif-item { display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-bottom: 2.5px dashed rgba(26, 31, 156, 0.15); }
 .notif-item:hover { background: var(--cream); }
 .notif-item .dot { width: 40px; height: 40px; border-radius: 12px; border: 2.5px solid var(--ink); background: var(--pink-soft); display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
 .notif-item.new .dot { background: var(--pink); }
+.notif-item > div { flex: 1; min-width: 0; }
 .notif-item b { font-size: 13px; }
-.notif-item small { display: block; font-family: var(--legible); opacity: 0.75; font-size: 11px; }
-.notif-item .amount { margin-left: auto; font-family: var(--display); font-size: 15px; }
+.notif-item small { display: block; font-family: var(--legible); opacity: 0.75; font-size: 11px; overflow-wrap: anywhere; }
+.notif-item .amount { margin-left: auto; font-family: var(--display); font-size: 15px; white-space: nowrap; }
 .notif-empty { padding: 34px 20px; text-align: center; }
 .notif-empty span { font-size: 34px; }
 .notif-empty p { font-size: 12px; opacity: 0.7; margin: 8px 0 0; }

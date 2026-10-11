@@ -6,10 +6,13 @@ import './components.css'
 import {
   supabase, fetchProducts, fetchSettings, saveDeliveryFee, saveAdminName,
   saveProduct, deleteProduct, fetchSupplies, saveSupply, deleteSupply,
-  fetchOrders, createOrder, updateOrderStatus, updateOrderItems, deleteOrder,
+  fetchOrders, fetchRecentOrders, createOrder, updateOrderItems,
   pushSupported, isSubscribed, subscribeAdmin, notifyAdmins,
 } from './supabase.js'
-import { calculateOrderTotals, canEditOrder, mergeOrderItems } from './orderUtils.js'
+import {
+  addDaysToDateKey, BUSINESS_TIME_ZONE, calculateOrderTotals, canEditOrder,
+  getDailySales, getSalesPeriods, localDateKey, mergeOrderItems,
+} from './orderUtils.js'
 
 const money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const fmt = (value) => money.format(Number(value) || 0)
@@ -110,13 +113,13 @@ function AdminNameForm({ initial, onSave, onClose }) {
   )
 }
 
-function Topbar({ title, onOpenMenu, pending, onBell, adminName, onEditAdmin }) {
+function Topbar({ title, onOpenMenu, notificationCount, onBell, adminName, onEditAdmin }) {
   return (
     <header className="topbar">
       <button className="mobile-menu" onClick={onOpenMenu}><Icon name="menu"/></button>
       <div><p>Hoy · operación en vivo</p><h1>{title}</h1></div>
       <div className="top-actions">
-        <button className="bell" onClick={onBell}><Icon name="bell"/>{pending > 0 && <em/>}</button>
+        <button className="bell" onClick={onBell} aria-label={`Notificaciones (${notificationCount})`}><Icon name="bell"/>{notificationCount > 0 && <em/>}</button>
         <button className="avatar" onClick={onEditAdmin} title="Cambiar nombre del administrador">{initials(adminName)}</button>
       </div>
     </header>
@@ -128,57 +131,25 @@ function Modal({ children, onClose }) {
   return <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(e) => e.stopPropagation()}>{children}</div></div>
 }
 
-/* ---------------- Modal de pedido entrante ---------------- */
-function IncomingOrderModal({ order, onAccept, onReject }) {
-  const count = (order.items || []).reduce((s, i) => s + (Number(i.qty) || 0), 0)
-  return (
-    <Modal onClose={() => {}}>
-      <div className="modal-head alert">
-        <span className="ring"><Icon name="bell" size={24}/></span>
-        <div><h3>¡Nuevo pedido!</h3><small>Recibido hace un momento · pedido web</small></div>
-      </div>
-      <div className="modal-body">
-        <div className="info-row"><span className="ico"><Icon name="user" size={17}/></span><div><b>Cliente</b><span>{order.customer_name || 'Sin nombre'}</span></div></div>
-        <div className="info-row"><span className="ico"><Icon name="phone" size={17}/></span><div><b>Teléfono</b><span>{order.customer_phone || '—'}</span></div></div>
-        <div className="info-row"><span className="ico"><Icon name="pin" size={17}/></span><div><b>Dirección</b><span>{order.address || '—'}</span></div></div>
-        {order.note ? <div className="info-row"><span className="ico"><Icon name="edit" size={16}/></span><div><b>Observaciones</b><span>{order.note}</span></div></div> : null}
-
-        <div className="order-lines">{(order.items || []).map((it, i) => <div className="order-line" key={i}><span><b>{it.qty}×</b> {it.name}</span><span>{fmt(it.price * it.qty)}</span></div>)}</div>
-
-        <div className="totals">
-          <div className="row"><span>Subtotal ({count} prod.)</span><span>{fmt(order.subtotal)}</span></div>
-          <div className="row"><span>Domicilio</span><span>{fmt(order.delivery_fee)}</span></div>
-          <div className="row"><span>Pago</span><span>{order.payment_method}</span></div>
-          <div className="row grand"><span>Total</span><span>{fmt(order.total)}</span></div>
-        </div>
-
-        <div className="modal-actions">
-          <button className="btn-reject" onClick={onReject}><Icon name="close" size={17}/> Rechazar</button>
-          <button className="btn-accept" onClick={onAccept}><Icon name="check" size={18}/> Aceptar pedido</button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
 /* ---------------- Panel de notificaciones ---------------- */
-function NotifPanel({ orders, pushOn, onEnable, onClose }) {
-  const recent = orders.slice(0, 15)
+function NotifPanel({ orders, pushOn, onEnable }) {
+  const notifications = orders.filter((order) => order.source === 'public')
   return (
     <div className="notif-panel">
       <header>
-        <h3>Notificaciones</h3>
+        <h3>Pedidos por enlace · {notifications.length}</h3>
         {!pushOn && <button onClick={onEnable}>Activar</button>}
       </header>
       <div className="notif-list">
-        {recent.length === 0
-          ? <div className="notif-empty"><span>🔔</span><p>Aún no hay pedidos. Cuando llegue uno lo verás aquí al instante.</p></div>
-          : recent.map((o) => (
-            <div key={o.id} className={`notif-item ${o.status === 'Solicitado' ? 'new' : ''}`}>
-              <span className="dot">{o.source === 'public' ? '🛵' : '🥪'}</span>
+        {notifications.length === 0
+          ? <div className="notif-empty"><span>🔔</span><p>Aún no hay pedidos por enlace. Cuando llegue uno quedará guardado aquí.</p></div>
+          : notifications.map((o) => (
+            <div key={o.id} className="notif-item new">
+              <span className="dot">🛵</span>
               <div>
-                <b>{o.customer_name || (o.source === 'pos' ? 'Venta mostrador' : 'Cliente')}</b>
-                <small>{o.status} · {new Date(o.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</small>
+                <b>{o.customer_name || 'Cliente'} · #{String(o.id).slice(-4)}</b>
+                <small>{new Date(o.created_at).toLocaleString('es-CO', { timeZone: BUSINESS_TIME_ZONE, dateStyle: 'medium', timeStyle: 'short' })}</small>
+                <small>{(o.items || []).map((item) => `${item.qty}× ${item.name}`).join(' · ')}</small>
               </div>
               <span className="amount">{fmt(o.total)}</span>
             </div>
@@ -206,11 +177,8 @@ function Metric({ label, value, note, color }) {
 }
 
 function Dashboard({ setPage, orders, adminName, onEditAdmin }) {
-  const today = new Date().toDateString()
-  const todays = orders.filter((o) => new Date(o.created_at).toDateString() === today && o.status !== 'Rechazado' && o.status !== 'Solicitado')
-  const salesToday = todays.reduce((s, o) => s + o.total, 0)
-  const pending = orders.filter((o) => ['Pendiente', 'Preparando', 'Listo'].includes(o.status)).length
-  const requests = orders.filter((o) => o.status === 'Solicitado').length
+  const periods = getSalesPeriods(orders)
+  const todayCount = periods.day.count
   const firstName = (adminName || 'administrador').trim().split(/\s+/)[0]
   return (
     <>
@@ -218,15 +186,14 @@ function Dashboard({ setPage, orders, adminName, onEditAdmin }) {
         <div><span className="eyebrow">Así va tu día</span><h2 title="Clic para editar tu nombre" style={{ cursor: 'pointer' }} onClick={onEditAdmin}>¡Buen día, {firstName}! <span>✎</span></h2><p>Tu operación está lista para comenzar.</p></div>
         <button className="primary" onClick={() => setPage('pos')}><Icon name="plus"/> Nueva venta</button>
       </div>
-      <section className="metric-grid">
-        <Metric label="Ventas de hoy" value={fmt(salesToday)} note={`${todays.length} pedidos hoy`} color="blue"/>
-        <Metric label="Pedidos por confirmar" value={String(requests)} note={requests ? 'Revisa las notificaciones' : 'Todo al día'} color="orange"/>
-        <Metric label="Pedidos activos" value={String(pending)} note="En cocina y entrega" color="pink"/>
-        <Metric label="Total registrado" value={String(orders.length)} note="Pedidos históricos" color="mint"/>
+      <section className="metric-grid summary-periods">
+        <Metric label="Ventas de hoy" value={fmt(periods.day.total)} note={`${periods.day.count} ventas registradas`} color="blue"/>
+        <Metric label="Ventas de la semana" value={fmt(periods.week.total)} note={`${periods.week.count} ventas desde el lunes`} color="orange"/>
+        <Metric label="Ventas del mes" value={fmt(periods.month.total)} note={`${periods.month.count} ventas este mes`} color="pink"/>
       </section>
       <section className="quick">
         <button onClick={() => setPage('pos')}><span className="quick-icon blue"><Icon name="cart"/></span><b>Registrar venta</b><small>Cobrar en segundos</small></button>
-        <button onClick={() => setPage('orders')}><span className="quick-icon pink"><Icon name="receipt"/></span><b>Ver pedidos</b><small>{pending} activos</small></button>
+        <button onClick={() => setPage('orders')}><span className="quick-icon pink"><Icon name="receipt"/></span><b>Ver pedidos</b><small>{todayCount} ventas hoy</small></button>
         <button onClick={() => setPage('products')}><span className="quick-icon orange"><Icon name="box"/></span><b>Productos e insumos</b><small>Administra tu menú</small></button>
       </section>
     </>
@@ -252,9 +219,9 @@ function POS({ products, addOrder }) {
   const complete = async () => {
     if (!cart.length) return
     try {
-      await addOrder({ items: cart, subtotal: total, delivery_fee: 0, total, payment_method: payment, note, status: 'Pendiente', source: 'pos' })
+      await addOrder({ items: cart, subtotal: total, delivery_fee: 0, total, payment_method: payment, note, source: 'pos' })
       setCart([]); setNote('')
-      toast('¡Venta registrada! El pedido está en cocina.', 'ok', '✅')
+      toast('¡Venta registrada!', 'ok', '✅')
     } catch (e) { toast('No se pudo registrar la venta.', 'err', '⚠️') }
   }
   return (
@@ -287,21 +254,6 @@ function POS({ products, addOrder }) {
 }
 
 /* ---------------- Pedidos ---------------- */
-function Confirm({ title, message, confirmLabel = 'Borrar', onConfirm, onClose }) {
-  return (
-    <Modal onClose={onClose}>
-      <div className="modal-head alert"><span className="ring"><Icon name="trash" size={22}/></span><div><h3>{title}</h3><small>Esta acción no se puede deshacer</small></div></div>
-      <div className="modal-body">
-        <p style={{ fontFamily: 'var(--legible)', textTransform: 'none', fontSize: 14 }}>{message}</p>
-        <div className="modal-actions">
-          <button className="btn-reject" onClick={onClose}>Cancelar</button>
-          <button className="btn-accept" style={{ background: 'var(--pink)', color: '#fff' }} onClick={onConfirm}><Icon name="trash" size={17}/> {confirmLabel}</button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
 function EditOrderModal({ order, products, onSave, onClose }) {
   const [category, setCategory] = useState('Todos')
   const [search, setSearch] = useState('')
@@ -364,46 +316,33 @@ function EditOrderModal({ order, products, onSave, onClose }) {
   )
 }
 
-function Orders({ orders, products, onAdvance, onDelete, onEdit }) {
-  const statuses = ['Pendiente', 'Preparando', 'Listo', 'Entregado']
-  const board = orders.filter((o) => statuses.includes(o.status))
-  const [toDelete, setToDelete] = useState(null)
+function Orders({ orders, products, onEdit }) {
   const [toEdit, setToEdit] = useState(null)
   const [now, setNow] = useState(Date.now())
+  const today = localDateKey(now)
+  const todays = orders.filter((order) => localDateKey(order.created_at) === today)
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10000)
     return () => clearInterval(timer)
   }, [])
-  const confirm = async () => {
-    if (!toDelete) return
-    await onDelete(toDelete)
-    setToDelete(null)
-  }
   return (
     <>
       <div className="section-head">
-        <div><span className="eyebrow">Cocina y entregas</span><h2>Pedidos de hoy</h2><p>{board.length} pedidos en tablero · {board.filter((o) => o.status !== 'Entregado').length} activos</p></div>
+        <div><span className="eyebrow">Ventas registradas</span><h2>Pedidos de hoy</h2><p>{todays.length} ventas guardadas. Los pedidos web también permanecen en Notificaciones.</p></div>
       </div>
-      <div className="order-board">{statuses.map((status) => (
-        <div className="order-column" key={status}>
-          <h3>{status}<span>{board.filter((o) => o.status === status).length}</span></h3>
-          {board.filter((o) => o.status === status).map((order) => (
-            <article className="ticket" key={order.id}>
-              <div><b>#{String(order.id).slice(-4)}</b><small>{new Date(order.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} · {order.payment_method}</small></div>
-              {order.customer_name ? <p style={{ fontStyle: 'normal', fontWeight: 700 }}>{order.source === 'public' ? '🛵 ' : ''}{order.customer_name}</p> : null}
-              <ul>{(order.items || []).map((it, i) => <li key={i}>{it.qty}× {it.name}</li>)}</ul>
-              {order.note ? <p>“{order.note}”</p> : null}
-              <strong>{fmt(order.total)}</strong>
-              <div className="ticket-actions">
-                {status !== 'Entregado' && <button onClick={() => onAdvance(order)}>{status === 'Listo' ? 'Marcar entregado' : `Pasar a ${statuses[statuses.indexOf(status) + 1]}`} <Icon name="arrow" size={15}/></button>}
-                {canEditOrder(order, now) && <button className="edit-order-ticket" onClick={() => setToEdit(order)} title="Editar durante los primeros 30 minutos"><Icon name="edit" size={14}/> Editar</button>}
-                <button className="del-btn" onClick={() => setToDelete(order)} title="Borrar pedido"><Icon name="trash" size={15}/></button>
-              </div>
-            </article>
-          ))}
-        </div>
-      ))}</div>
-      {toDelete && <Confirm title="¿Borrar pedido?" message={`Se eliminará el pedido #${String(toDelete.id).slice(-4)} de ${toDelete.customer_name || 'mostrador'} ($${fmt(toDelete.total)}).`} onConfirm={confirm} onClose={() => setToDelete(null)}/>}
+      {todays.length === 0
+        ? <div className="empty-report"><span>🥪</span><b>Aún no hay ventas hoy</b><small>Los pedidos guardados aparecerán aquí.</small></div>
+        : <div className="order-board sales-list">{todays.map((order) => (
+          <article className="ticket" key={order.id}>
+            <div><b>#{String(order.id).slice(-4)}</b><small>{new Date(order.created_at).toLocaleString('es-CO', { timeZone: BUSINESS_TIME_ZONE, dateStyle: 'short', timeStyle: 'short' })} · {order.payment_method}</small></div>
+            {order.customer_name ? <p className="ticket-customer">{order.source === 'public' ? '🛵 ' : ''}{order.customer_name}</p> : <p className="ticket-customer">Venta mostrador</p>}
+            {order.address && <small>{order.address}</small>}
+            <ul>{(order.items || []).map((it, i) => <li key={i}>{it.qty}× {it.name}</li>)}</ul>
+            {order.note ? <p>“{order.note}”</p> : null}
+            <strong>{fmt(order.total)}</strong>
+            {canEditOrder(order, now) && <div className="ticket-actions"><button className="edit-order-ticket" onClick={() => setToEdit(order)} title="Editar durante los primeros 30 minutos"><Icon name="edit" size={14}/> Editar</button></div>}
+          </article>
+        ))}</div>}
       {toEdit && <EditOrderModal order={toEdit} products={products} onSave={onEdit} onClose={() => setToEdit(null)}/>}
     </>
   )
@@ -411,8 +350,8 @@ function Orders({ orders, products, onAdvance, onDelete, onEdit }) {
 
 /* ---------------- Caja ---------------- */
 function Cash({ orders }) {
-  const today = new Date().toDateString()
-  const todays = orders.filter((o) => new Date(o.created_at).toDateString() === today && o.status !== 'Rechazado' && o.status !== 'Solicitado')
+  const today = localDateKey(new Date())
+  const todays = orders.filter((o) => localDateKey(o.created_at) === today)
   const total = todays.reduce((s, o) => s + o.total, 0)
   const byMethod = ['Efectivo', 'Nequi', 'Transferencia'].map((m) => {
     const sum = todays.filter((o) => o.payment_method === m).reduce((s, o) => s + o.total, 0)
@@ -444,19 +383,47 @@ function Cash({ orders }) {
 
 /* ---------------- Reportes ---------------- */
 function Reports({ orders }) {
-  const valid = orders.filter((o) => o.status !== 'Rechazado' && o.status !== 'Solicitado')
-  const income = valid.reduce((s, o) => s + o.total, 0)
+  const today = localDateKey(new Date())
+  const [fromDate, setFromDate] = useState(() => addDaysToDateKey(today, -6))
+  const [toDate, setToDate] = useState(today)
+  const validRange = fromDate && toDate && fromDate <= toDate
+  const sales = validRange ? orders.filter((order) => {
+    const date = localDateKey(order.created_at)
+    return date >= fromDate && date <= toDate
+  }) : []
+  const income = sales.reduce((s, o) => s + (Number(o.total) || 0), 0)
   const top = {}
-  valid.forEach((o) => (o.items || []).forEach((it) => { top[it.name] = (top[it.name] || 0) + it.qty }))
+  sales.forEach((o) => (o.items || []).forEach((it) => { top[it.name] = (top[it.name] || 0) + (Number(it.qty) || 0) }))
   const ranking = Object.entries(top).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const daily = getDailySales(sales)
+  const formatDay = (date) => new Date(`${date}T12:00:00-05:00`).toLocaleDateString('es-CO', { timeZone: BUSINESS_TIME_ZONE, dateStyle: 'full' })
   return (
     <>
-      <div className="section-head"><div><span className="eyebrow">Analítica simple</span><h2>Reportes</h2><p>Los números importantes de tu negocio.</p></div></div>
+      <div className="section-head"><div><span className="eyebrow">Analítica simple</span><h2>Reportes</h2><p>Consulta las ventas de días anteriores y abre cada día para ver el detalle.</p></div></div>
+      <section className="panel report-date-filter">
+        <div className="field"><label htmlFor="report-from">Desde</label><input id="report-from" type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)}/></div>
+        <div className="field"><label htmlFor="report-to">Hasta</label><input id="report-to" type="date" value={toDate} min={fromDate || undefined} max={today} onChange={(event) => setToDate(event.target.value)}/></div>
+      </section>
       <div className="report-cards">
-        <Metric label="Ingresos totales" value={fmt(income)} note={`${valid.length} pedidos`} color="blue"/>
-        <Metric label="Pedidos web" value={String(valid.filter((o) => o.source === 'public').length)} note="Recibidos por el link" color="orange"/>
-        <Metric label="Ventas mostrador" value={String(valid.filter((o) => o.source === 'pos').length)} note="Punto de venta" color="pink"/>
+        <Metric label="Ingresos del período" value={fmt(income)} note={`${sales.length} ventas`} color="blue"/>
+        <Metric label="Pedidos web" value={String(sales.filter((o) => o.source === 'public').length)} note="En el período elegido" color="orange"/>
+        <Metric label="Ventas mostrador" value={String(sales.filter((o) => o.source === 'pos').length)} note="En el período elegido" color="pink"/>
       </div>
+      <section className="panel report-history">
+        <div className="panel-title"><div><span className="eyebrow">Historial</span><h3>Ventas por día</h3></div></div>
+        {!validRange
+          ? <div className="empty-report"><span>📅</span><b>Revisa el período</b><small>La fecha inicial debe ser anterior a la fecha final.</small></div>
+          : daily.length === 0
+            ? <div className="empty-report"><span>📈</span><b>No hay ventas en esas fechas</b><small>Prueba con otro período.</small></div>
+            : daily.map((day) => <details className="report-day" key={day.date}>
+              <summary><span>{formatDay(day.date)}</span><strong>{day.count} ventas · {fmt(day.total)}</strong></summary>
+              <div className="report-day-orders">{day.orders.map((order) => <div className="movement" key={order.id}>
+                <span>{order.source === 'public' ? '🛵' : '🥪'}</span>
+                <div><strong>{order.customer_name || 'Venta mostrador'} · #{String(order.id).slice(-4)}</strong><small>{new Date(order.created_at).toLocaleTimeString('es-CO', { timeZone: BUSINESS_TIME_ZONE, hour: '2-digit', minute: '2-digit' })} · {order.payment_method} · {(order.items || []).map((item) => `${item.qty}× ${item.name}`).join(', ')}</small></div>
+                <strong>{fmt(order.total)}</strong>
+              </div>)}</div>
+            </details>)}
+      </section>
       <section className="panel" style={{ marginTop: 22 }}>
         <div className="panel-title"><div><span className="eyebrow">En el top</span><h3>Más vendidos</h3></div></div>
         {ranking.length === 0 ? <div className="empty-report"><span>📈</span><b>Aún no hay datos</b><small>Cuando registres ventas verás el ranking aquí.</small></div>
@@ -603,7 +570,7 @@ function PublicMenu() {
       const order = {
         customer_name: form.name, customer_phone: form.phone, address: form.address,
         items: cart, subtotal, delivery_fee: deliveryFee, total,
-        payment_method: form.payment, note: form.note, status: 'Solicitado', source: 'public',
+        payment_method: form.payment, note: form.note, source: 'public',
       }
       const saved = await createOrder(order)
       await notifyAdmins(saved)
@@ -618,7 +585,7 @@ function PublicMenu() {
       <section className="public-products"><div className="order-success">
         <div className="check"><Icon name="check" size={44}/></div>
         <h3>¡Pedido enviado!</h3>
-        <p>El local ya recibió tu pedido y lo está confirmando. Pronto te contactan para la entrega. ¡Gracias! ✌️</p>
+        <p>El local recibió tu pedido. Quedó guardado para que puedan revisarlo y preparar tu compra. ¡Gracias! ✌️</p>
         <button className="primary" style={{ margin: '22px auto 0' }} onClick={() => { setDone(false); setCheckout(false) }}>Hacer otro pedido</button>
       </div></section>
     </main>
@@ -705,14 +672,30 @@ function App() {
   useEffect(() => {
     if (isPublic) return
     reloadProducts(); reloadSettings()
-    fetchOrders().then((data) => { data.forEach((o) => knownIds.current.add(o.id)); setOrders(data) })
+    const mergeOrderSnapshot = (data, notifyRecovered = false) => {
+      const recoveredWebOrders = data.filter((order) => order.source === 'public' && !knownIds.current.has(order.id))
+      data.forEach((order) => knownIds.current.add(order.id))
+      setOrders((previous) => {
+        const merged = new Map(data.map((order) => [order.id, order]))
+        previous.forEach((order) => merged.set(order.id, order))
+        return [...merged.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+      })
+      if (notifyRecovered && recoveredWebOrders.length) {
+        const count = recoveredWebOrders.length
+        pushToast(count === 1 ? 'Pedido web guardado en notificaciones.' : `${count} pedidos web guardados en notificaciones.`, 'ok', '🔔')
+      }
+    }
+    const refreshAllOrders = (notifyRecovered = true) => fetchOrders().then((data) => mergeOrderSnapshot(data, notifyRecovered))
+      .catch(() => pushToast('No se pudo actualizar el historial de ventas.', 'err', '⚠️'))
+    const refreshRecentOrders = () => fetchRecentOrders().then((data) => mergeOrderSnapshot(data, true)).catch(() => {})
+    refreshAllOrders(false).catch(() => {})
     isSubscribed().then(setPushOn)
 
     const channel = supabase.channel('pm_orders_rt')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pm_orders' }, (payload) => {
         const row = payload.new
         setOrders((prev) => prev.some((o) => o.id === row.id) ? prev : [row, ...prev])
-        if (!knownIds.current.has(row.id) && row.status === 'Solicitado') {
+        if (!knownIds.current.has(row.id) && row.source === 'public') {
           knownIds.current.add(row.id); playDing(); pushToast('¡Nuevo pedido recibido!', 'ok', '🔔')
         }
         knownIds.current.add(row.id)
@@ -721,34 +704,22 @@ function App() {
         setOrders((prev) => prev.map((o) => o.id === payload.new.id ? payload.new : o))
       })
       .subscribe()
-    return () => supabase.removeChannel(channel)
+    const timer = setInterval(refreshRecentOrders, 60_000)
+    const onFocus = () => refreshAllOrders()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      supabase.removeChannel(channel)
+    }
   }, [isPublic, reloadProducts, reloadSettings, pushToast])
 
-  const incoming = orders.find((o) => o.status === 'Solicitado')
-  const pendingCount = orders.filter((o) => o.status === 'Solicitado').length
+  const notificationCount = orders.filter((order) => order.source === 'public').length
 
   const addOrder = async (order) => {
     const saved = await createOrder(order)
     knownIds.current.add(saved.id)
     setOrders((prev) => prev.some((item) => item.id === saved.id) ? prev : [saved, ...prev])
-  }
-  const removeOrder = async (order) => {
-    try {
-      await deleteOrder(order.id)
-      setOrders((prev) => prev.filter((o) => o.id !== order.id))
-      if (incoming && incoming.id === order.id) {
-        // El modal de pedido entrante se cierra al desaparecer `incoming`
-      }
-      pushToast('Pedido borrado.', 'ok', '🗑️')
-    } catch (e) {
-      pushToast('No se pudo borrar el pedido.', 'err', '⚠️')
-    }
-  }
-  const advance = async (order) => {
-    const flow = ['Pendiente', 'Preparando', 'Listo', 'Entregado']
-    const next = flow[Math.min(flow.indexOf(order.status) + 1, 3)]
-    setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: next } : o))
-    await updateOrderStatus(order.id, next)
   }
   const editOrder = async (order, items, totals) => {
     try {
@@ -758,18 +729,6 @@ function App() {
     } catch (error) {
       throw error
     }
-  }
-  const acceptIncoming = async () => {
-    if (!incoming) return
-    setOrders((prev) => prev.map((o) => o.id === incoming.id ? { ...o, status: 'Pendiente' } : o))
-    await updateOrderStatus(incoming.id, 'Pendiente')
-    pushToast('Pedido aceptado y en cocina.', 'ok', '✅')
-  }
-  const rejectIncoming = async () => {
-    if (!incoming) return
-    setOrders((prev) => prev.map((o) => o.id === incoming.id ? { ...o, status: 'Rechazado' } : o))
-    await updateOrderStatus(incoming.id, 'Rechazado')
-    pushToast('Pedido rechazado.', 'err', '✖️')
   }
   const enablePush = async () => {
     try { await subscribeAdmin(); setPushOn(true); pushToast('¡Notificaciones activadas!', 'ok', '🔔') }
@@ -797,14 +756,14 @@ function App() {
       <div className="app-shell">
         <Sidebar page={page} setPage={setPage} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>
         <main className="main">
-          <Topbar title={titles[page]} onOpenMenu={() => setMobile(!mobile)} pending={pendingCount} onBell={() => setNotifOpen((v) => !v)} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>
+          <Topbar title={titles[page]} onOpenMenu={() => setMobile(!mobile)} notificationCount={notificationCount} onBell={() => setNotifOpen((v) => !v)} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>
           {mobile && <div className="mobile-nav"><button onClick={() => setMobile(false)}><Icon name="close"/></button>{[['dashboard', 'Resumen'], ['pos', 'Nueva venta'], ['orders', 'Pedidos'], ['cash', 'Caja'], ['reports', 'Reportes'], ['products', 'Productos']].map(([id, label]) => <a key={id} onClick={() => { setPage(id); setMobile(false) }}>{label}</a>)}</div>}
-          {notifOpen && <NotifPanel orders={orders} pushOn={pushOn} onEnable={enablePush} onClose={() => setNotifOpen(false)}/>}
+          {notifOpen && <NotifPanel orders={orders} pushOn={pushOn} onEnable={enablePush}/>}
           <div className="page-content">
             {showBanner && <NotifBanner onEnable={enablePush}/>}
             {page === 'dashboard' && <Dashboard setPage={setPage} orders={orders} adminName={adminName} onEditAdmin={() => setEditingName(true)}/>}
             {page === 'pos' && <POS products={products} addOrder={addOrder}/>}
-            {page === 'orders' && <Orders orders={orders} products={products} onAdvance={advance} onDelete={removeOrder} onEdit={editOrder}/>}
+            {page === 'orders' && <Orders orders={orders} products={products} onEdit={editOrder}/>}
             {page === 'cash' && <Cash orders={orders}/>}
             {page === 'reports' && <Reports orders={orders}/>}
             {page === 'products' && <Products products={products} reloadProducts={reloadProducts} settings={settings} reloadSettings={reloadSettings}/>}
@@ -812,7 +771,6 @@ function App() {
         </main>
       </div>
       {editingName && <AdminNameForm initial={adminName} onSave={saveAdmin} onClose={() => setEditingName(false)}/>}
-      {incoming && <IncomingOrderModal order={incoming} onAccept={acceptIncoming} onReject={rejectIncoming}/>}
       <Toasts list={toasts}/>
     </ToastCtx.Provider>
   )

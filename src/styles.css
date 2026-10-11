@@ -574,6 +574,7 @@ textarea::placeholder { color: var(--blue); opacity: 0.5; }
    PEDIDOS (KANBAN)
    ============================================================ */
 .order-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+.order-board.sales-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .order-column {
   background: var(--cream);
   border: var(--line);
@@ -608,6 +609,8 @@ textarea::placeholder { color: var(--blue); opacity: 0.5; }
 .ticket > div { display: flex; justify-content: space-between; align-items: center; }
 .ticket > div b { font-family: var(--display); font-size: 16px; }
 .ticket > div small { font-size: 9px; opacity: 0.7; }
+.ticket .ticket-customer { font-style: normal; font-weight: 700; opacity: 1; }
+.ticket > small { display: block; font-size: 10px; opacity: 0.7; margin-top: -6px; }
 .ticket ul { font-size: 12px; padding-left: 18px; line-height: 1.7; margin: 8px 0; }
 .ticket p { font-size: 11px; opacity: 0.75; font-style: italic; }
 .ticket > strong { font-family: var(--display); font-size: 17px; display: block; margin: 10px 0; }
@@ -689,6 +692,19 @@ textarea::placeholder { color: var(--blue); opacity: 0.5; }
    REPORTES
    ============================================================ */
 .report-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.report-date-filter { display: flex; align-items: end; gap: 16px; margin-bottom: 18px; }
+.report-date-filter .field { width: min(240px, 100%); margin: 0; }
+.report-history { margin-top: 22px; }
+.report-history .panel-title { margin-bottom: 16px; }
+.report-day { border-top: 2px dashed rgba(26, 31, 156, 0.18); }
+.report-day:last-child { border-bottom: 2px dashed rgba(26, 31, 156, 0.18); }
+.report-day summary { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 15px 4px; cursor: pointer; font-weight: 800; }
+.report-day summary strong { font-family: var(--display); text-align: right; }
+.report-day-orders { padding: 0 4px 8px; }
+.report-day-orders .movement { gap: 10px; }
+.report-day-orders .movement > div { min-width: 0; }
+.report-day-orders .movement small { line-height: 1.45; }
+.report-day-orders .movement > strong { white-space: nowrap; }
 .report-placeholder { text-align: center; padding: 52px; margin-top: 24px; }
 .report-placeholder > span { font-size: 52px; }
 .report-placeholder h3 { font-family: var(--display); font-size: 24px; margin-top: 14px; }
@@ -858,7 +874,12 @@ textarea::placeholder { color: var(--blue); opacity: 0.5; }
   .search { width: 100%; }
   .product-grid { grid-template-columns: repeat(2, 1fr); }
   .order-board { grid-template-columns: 1fr 1fr; overflow: auto; padding-bottom: 8px; }
+  .order-board.sales-list { grid-template-columns: 1fr; overflow: visible; }
   .order-column { min-width: 220px; }
+  .report-date-filter { align-items: stretch; flex-direction: column; }
+  .report-date-filter .field { width: 100%; }
+  .report-day summary { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .report-day summary strong { text-align: left; }
   .cash-hero { grid-template-columns: 1fr; padding: 14px 24px; }
   .cash-hero > div, .cash-hero > div:first-child { padding: 18px 0; border-right: 0; border-bottom: 3px dashed rgba(255,255,255,.25); }
   .cash-hero > div:last-child { border: 0; }

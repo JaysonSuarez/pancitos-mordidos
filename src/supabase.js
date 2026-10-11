@@ -42,17 +42,33 @@ export async function saveSupply(supply) {
 export async function deleteSupply(id) {
   return supabase.from('pm_supplies').delete().eq('id', id)
 }
+async function fetchOrderPages(createdSince = null) {
+  const pageSize = 500
+  const orders = []
+  for (let offset = 0; ; offset += pageSize) {
+    let request = supabase
+      .from('pm_orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1)
+    if (createdSince) request = request.gte('created_at', createdSince)
+    const { data, error } = await request
+    if (error) throw error
+    orders.push(...(data || []))
+    if (!data || data.length < pageSize) return orders
+  }
+}
 export async function fetchOrders() {
-  const { data } = await supabase.from('pm_orders').select('*').order('created_at', { ascending: false }).limit(200)
-  return data || []
+  return fetchOrderPages()
+}
+export async function fetchRecentOrders() {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  return fetchOrderPages(since)
 }
 export async function createOrder(order) {
   const { data, error } = await supabase.from('pm_orders').insert(order).select().single()
   if (error) throw error
   return data
-}
-export async function updateOrderStatus(id, status) {
-  return supabase.from('pm_orders').update({ status }).eq('id', id)
 }
 export async function updateOrderItems(order, items, totals) {
   const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString()
@@ -62,17 +78,12 @@ export async function updateOrderItems(order, items, totals) {
     .eq('id', order.id)
     .gte('created_at', cutoff)
     .lte('created_at', new Date().toISOString())
-    .neq('status', 'Rechazado')
     .select()
     .maybeSingle()
   if (error) throw error
   if (!data) throw new Error('El pedido ya no se puede editar. El límite es de 30 minutos desde que se guardó.')
   return data
 }
-export async function deleteOrder(id) {
-  return supabase.from('pm_orders').delete().eq('id', id)
-}
-
 /* ---------- Push web ---------- */
 function urlB64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
